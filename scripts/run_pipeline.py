@@ -37,7 +37,9 @@ def main(args):
     # === MLflow Setup - ESSENTIAL for experiment tracking ===
     # Configure MLflow to use local file-based tracking (not a tracking server)
     project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-    mlruns_path = args.mlflow_uri or f"file://{project_root}/mlruns"  # Local file-based tracking
+    mlruns_path = args.mlflow_uri or f"file:///{project_root.replace(os.sep, '/')}/mlruns"  # Local file-based tracking
+     
+    print("MLflow URI:", mlruns_path)
     mlflow.set_tracking_uri(mlruns_path)
     mlflow.set_experiment(args.experiment)  # Creates experiment if doesn't exist
 
@@ -54,23 +56,29 @@ def main(args):
         df = load_data(args.input)  # Load raw CSV data with error handling
         print(f"✅ Data loaded: {df.shape[0]} rows, {df.shape[1]} columns")
 
-        # === CRITICAL: Data Quality Validation ===
-        # This step is ESSENTIAL for production ML - validates data quality before training
-        print("🔍 Validating data quality with Great Expectations...")
-        is_valid, failed = validate_telco_data(df)
-        mlflow.log_metric("data_quality_pass", int(is_valid))  # Track data quality over time
-
-        if not is_valid:
-            # Log validation failures for debugging
-            import json
-            mlflow.log_text(json.dumps(failed, indent=2), artifact_file="failed_expectations.json")
-            raise ValueError(f"❌ Data quality check failed. Issues: {failed}")
-        else:
-            print("✅ Data validation passed. Logged to MLflow.")
+        
 
         # === STAGE 2: Data Preprocessing ===
         print("🔧 Preprocessing data...")
         df = preprocess_data(df)  # Basic cleaning (handle missing values, fix data types)
+
+        # === CRITICAL: Data Quality Validation ===
+        # Validate AFTER preprocessing because TotalCharges is converted to numeric there
+        print("🔍 Validating data quality with Great Expectations...")
+        is_valid, failed = validate_telco_data(df)
+        mlflow.log_metric("data_quality_pass", int(is_valid))
+
+        if not is_valid:
+            import json
+            mlflow.log_text(
+                json.dumps(failed, indent=2),
+                artifact_file="failed_expectations.json"
+            )
+            raise ValueError(
+                f"❌ Data quality check failed. Issues: {failed}"
+            )
+        else:
+            print("✅ Data validation passed. Logged to MLflow.")
 
         # Save processed dataset for reproducibility and debugging
         processed_path = os.path.join(project_root, "data", "processed", "telco_churn_processed.csv")

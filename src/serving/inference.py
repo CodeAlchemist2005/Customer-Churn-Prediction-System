@@ -61,7 +61,7 @@ except Exception as e:
 # This ensures the model receives features in the expected order
 try:
     feature_file = os.path.join(
-        os.path.dirname(MODEL_DIR),
+        MODEL_DIR,
          "feature_columns.txt"
     )
 
